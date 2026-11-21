@@ -5,6 +5,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Controller.h"
 #include "Engine/Engine.h"
+#include "Perception/AISense_Hearing.h"
 
 AMyCharacter::AMyCharacter()
 {
@@ -50,6 +51,7 @@ void AMyCharacter::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 	if (bIsSprinting)
 	{
+		UAISense_Hearing::ReportNoiseEvent(GetWorld(), GetActorLocation(), 1.0f, this, 0.f, FName("Sprint"));
 		Stamina -= StaminaDrainRate * DeltaTime;
 		if (Stamina <= 0.f)
 		{

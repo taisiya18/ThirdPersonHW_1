@@ -18,8 +18,12 @@ public class ThirdPersonHW_1 : ModuleRules
 			"StateTreeModule",
 			"GameplayStateTreeModule",
 			"UMG",
-			"Slate"
-		});
+			"Slate",
+			"AIModule",
+            "GameplayTasks",
+            "NavigationSystem"
+
+        });
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
 
