@@ -1,55 +1,88 @@
 # ThirdPersonHW_1
 
-Домашнее задание 1: Расширение Third Person Template (Unreal Engine 5.8)
+Домашние задания 1 и 2 по Unreal Engine 5.8, расширение шаблона Third Person.
 
 ## Описание
 
-Проект на основе шаблона Third Person. Реализован C++ класс персонажа MyCharacter, унаследованный от ACharacter, с системой Enhanced Input, делегатами, анимациями и механикой выносливости.
+В ДЗ1 сделан C++ класс персонажа с Enhanced Input, делегатом взаимодействия, анимациями и выносливостью. В ДЗ2 добавлена процедурная генерация окружения через PCG и противник с ИИ, который патрулирует, преследует игрока и реагирует на шум.
+
+Основной уровень Lvl_AI2, он же стоит картой по умолчанию.
 
 ## Управление
 
 | Клавиша | Действие |
 | --- | --- |
 | WASD | Перемещение |
-| Mouse | Управление камерой |
+| Mouse | Камера |
 | Space | Прыжок |
-| Left Shift | Спринт (расходует стамину) |
+| Left Shift | Спринт, тратит стамину и создает шум |
 | E | Взаимодействие |
 
-## Что реализовано
+## ДЗ1
 
-- C++ класс MyCharacter, унаследованный от ACharacter
-- Enhanced Input System: Sprint (Left Shift), Interact (E), Jump (Space), Move (WASD), Look (Mouse)
-- Dynamic Multicast Delegate (FOnInteract) для события взаимодействия, подписан в Blueprint через Bind Event с выводом Print String "Interaction triggered!"
-- Animation Blueprint (ABP_Unarmed) со Sprint-состоянием в State Machine и Transition Rules на основе переменной bIsSprinting
-- Система выносливости (Stamina): максимум 100, расход 20/сек при спринте, восстановление 10/сек, принудительная остановка спринта при достижении 0, отображение на экране через AddOnScreenDebugMessage
+Класс MyCharacter унаследован от ACharacter. Ввод построен на Enhanced Input, привязаны Move, Look, Jump, Sprint и Interact.
 
-## Как реализовано
+Для взаимодействия объявлен Dynamic Multicast Delegate FOnInteract. По нажатию E он вызывается из C++, а в Blueprint персонажа на него подписан Print String.
 
-### Класс персонажа (MyCharacter)
+В Animation Blueprint в State Machine добавлено состояние Sprint с переходами по переменной bIsSprinting.
 
-Создан C++ класс MyCharacter, наследующий ACharacter. В конструкторе задаются начальные значения: скорость ходьбы (500), скорость спринта (900), максимальная стамина (100), скорость расхода (20/сек) и восстановления (10/сек). Отключено вращение персонажа по контроллеру — вместо этого используется bOrientRotationToMovement, чтобы персонаж поворачивался в сторону движения.
+Выносливость устроена так. Максимум 100 единиц, при спринте уходит 20 в секунду, в покое возвращается по 10. Когда запас кончается, спринт выключается принудительно и скорость падает до обычной. Текущее значение выводится на экран.
 
-### Система ввода (Enhanced Input)
+## ДЗ2, уровень и навигация
 
-В BeginPlay загружается Input Mapping Context (IMC_Default) через UEnhancedInputLocalPlayerSubsystem. В SetupPlayerInputComponent привязаны Input Actions: IA_Move, IA_Look, IA_Sprint (Started/Completed), IA_Interact (Started), IA_Jump (Started/Completed). Все действия заданы как UPROPERTY и назначаются в Blueprint.
+Уровень Lvl_AI2 построен на ровном ландшафте. По нему расставлен NavMeshBoundsVolume, навигационная сетка строится и обходит сгенерированные препятствия, поэтому ИИ не ходит сквозь них.
 
-### Делегат взаимодействия
+## ДЗ2, процедурная генерация
 
-Объявлен через DECLARE_DYNAMIC_MULTICAST_DELEGATE с UPROPERTY(BlueprintAssignable). При нажатии E вызывается OnInteract.Broadcast(). В EventGraph Blueprint персонажа (BP_ThirdPersonCharacter) на BeginPlay подписан Bind Event to On Interact, который при срабатывании вызывает Print String.
+Граф PCG_Scatter расставляет препятствия без ручного размещения. Цепочка нод такая, Create Points Grid, затем Transform Points, затем Static Mesh Spawner.
 
-### Система выносливости (Stamina)
+Transform Points задает каждому объекту случайный поворот от 0 до 360 градусов, случайный масштаб от 1.0 до 2.5 и случайное смещение в пределах трех метров. Без смещения расстановка выглядела бы слишком регулярной.
 
-Реализована в функции Tick. При спринте стамина уменьшается на StaminaDrainRate * DeltaTime. Когда стамина достигает 0, спринт принудительно прекращается и скорость возвращается к обычной. В покое стамина восстанавливается на StaminaRegenRate * DeltaTime до максимума. Текущее значение отображается на экране.
+## ДЗ2, ИИ
 
-### Анимации
+EnemyAIController написан на C++ и унаследован от AAIController. Он запускает дерево поведения, запоминает стартовую точку врага и настраивает восприятие. Зрение работает на 1500 единиц с углом обзора 90 градусов, слух на 3000.
 
-BP_ThirdPersonCharacter перенаправлен (reparented) на MyCharacter. В Animation Blueprint (ABP_Unarmed) добавлена переменная bIsSprinting, которая обновляется из персонажа. В State Machine добавлено состояние Sprint с переходами: из Idle/Walk в Sprint при bIsSprinting == true, обратно при bIsSprinting == false.
+Противник BP_EnemyCharacter управляется этим контроллером.
+
+В Blackboard BB_Enemy лежат ключи TargetActor, PatrolLocation, HomeLocation, NoiseLocation и HeardNoise.
+
+Вся логика поведения собрана в дереве BT_Enemy, в обход дерева ничего не делается.
+
+## Поведение
+
+Дерево построено на селекторе с тремя ветками, приоритет идет слева направо.
+
+Chase срабатывает, когда в TargetActor записан игрок. Враг увидел его и бежит следом. На ветке стоит декоратор с прерыванием Both, поэтому погоня мгновенно перебивает остальные состояния.
+
+Investigate включается по флагу HeardNoise. Враг услышал шум и идет к его источнику.
+
+Patrol работает в остальное время. Враг берет случайную точку на навигации в радиусе 1000 вокруг стартовой позиции, доходит до нее и ждет две секунды.
+
+Когда игрок пропадает из виду, контроллер очищает TargetActor, и дерево само возвращает врага к патрулированию.
+
+## Усложнение, реакция на шум
+
+Усложненное поведение сделано через кастомный узел дерева на C++.
+
+Пока игрок бежит спринтом, он издает шум. Враг слышит его, даже если не видит самого игрока, разворачивается и идет проверять источник. Никого не найдя, возвращается к патрулю.
+
+Как это собрано.
+
+1. В MyCharacter::Tick при активном спринте вызывается UAISense_Hearing::ReportNoiseEvent, те игрок порождает звуковое событие в своей текущей точке.
+2. В EnemyAIController добавлен сенсор слуха UAISenseConfig_Hearing. В обработчике OnTargetPerceptionUpdated стимулы разделяются по типу, слух пишет позицию в NoiseLocation и поднимает флаг HeardNoise, зрение работает с TargetActor.
+3. Узел BTTask_InvestigateNoise унаследован от UBTTaskNode и работает как latent-задача. В ExecuteTask он читает NoiseLocation и отправляет ИИ к точке через MoveToLocation, возвращая InProgress. В TickTask отслеживается завершение пути, после прибытия флаг HeardNoise сбрасывается и задача закрывается.
+4. Ключи NoiseLocationKey и HeardNoiseKey, а также радиус достижения вынесены в настройки узла, их можно менять прямо в дереве.
 
 ## Структура проекта
 
-- `Source/ThirdPersonHW_1/MyCharacter.h` — заголовочный файл класса персонажа
-- `Source/ThirdPersonHW_1/MyCharacter.cpp` — реализация: ввод, движение, спринт, стамина, взаимодействие
-- `Content/ThirdPerson/Blueprints/BP_ThirdPersonCharacter` — Blueprint персонажа (reparented на MyCharacter)
-- `Content/Characters/Mannequins/Animations/ABP_Unarmed` — Animation Blueprint с State Machine
-- `Content/Input/IMC_Default` — Input Mapping Context с привязками клавиш
+| Путь | Назначение |
+| --- | --- |
+| Source/ThirdPersonHW_1/MyCharacter | Игрок, ввод, спринт, стамина, делегат, генерация шума |
+| Source/ThirdPersonHW_1/EnemyAIController | Контроллер ИИ, восприятие, запуск дерева, работа с Blackboard |
+| Source/ThirdPersonHW_1/BTTask_InvestigateNoise | Кастомный узел дерева, движение к источнику шума |
+| Content/AI/BT_Enemy | Дерево поведения |
+| Content/AI/BB_Enemy | Blackboard |
+| Content/AI/BTTask_FindPatrolPoint | Поиск случайной точки патруля |
+| Content/AI/BP_EnemyCharacter | Противник |
+| Content/AI/PCG_Scatter | Граф процедурной расстановки |
+| Content/Lvl_AI2 | Основной уровень |
